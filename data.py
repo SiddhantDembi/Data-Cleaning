@@ -1,19 +1,17 @@
 import streamlit as st
 import pandas as pd
 import io
-import re
 
 # Streamlit UI
-st.title("Clean your file")
+st.title("Data Fixer")
 
 # Function to download the cleaned DataFrame
-def download(cleaned_file, input_file_name, file_extension):
-    default_cleaned_file_name = f"{input_file_name}_cleaned.{file_extension}"
+def download(cleaned_file, file_name_with_extension):
     st.download_button(
         label="Download Cleaned File",
         data=cleaned_file,
         key="cleaned_file",
-        file_name=default_cleaned_file_name,
+        file_name=file_name_with_extension,
     )
 
 # Function to replace null values in the DataFrame
@@ -41,6 +39,32 @@ def convert_to_lowercase(df, selected_columns):
                 return df
     return df
 
+# Function to delete selected columns from the DataFrame
+def delete_columns(df, columns_to_delete):
+    df = df.drop(columns=columns_to_delete, errors='ignore')
+    return df
+
+# Function to sort a given column in ascending or descending order
+def sort_column(df, column_name, ascending):
+    if column_name in df.columns:
+        # Convert all values in the column to strings and then sort
+        df[column_name] = df[column_name].astype(str)
+        df = df.sort_values(by=column_name, ascending=ascending)
+    return df
+
+# Function to capitalize the first letter of elements in the selected columns (alphabet characters only)
+def capitalize_column_values(df, selected_columns):
+    for selected_column in selected_columns:
+        if selected_column in df.columns:
+            if df[selected_column].dtype == 'object':
+                df[selected_column] = df[selected_column].apply(lambda x: x.capitalize() if isinstance(x, str) and x and x[0].isalpha() else x)
+            else:
+                st.error(f"Column '{selected_column}' is not of string data type. Select a string column to capitalize.")
+    return df
+
+# Initialize a dictionary to store dataframes for each sheet
+sheets_dataframes = {}
+
 uploaded_file = st.file_uploader("Upload an Excel or CSV file", type=["xls", "xlsx", "csv"])
 
 if uploaded_file is not None:
@@ -50,49 +74,76 @@ if uploaded_file is not None:
             # Load Excel file using openpyxl
             xls = pd.ExcelFile(uploaded_file)
             sheet_names = xls.sheet_names
-            selected_sheet = st.selectbox("Select a sheet:", sheet_names)
-            df = pd.read_excel(xls, sheet_name=selected_sheet)
+
+            for sheet_name in sheet_names:
+                sheets_dataframes[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name)
         else:
             df = pd.read_csv(uploaded_file)
+            sheets_dataframes["Sheet 1"] = df  # Store the CSV data in a sheet named "Sheet 1"
     except Exception as e:
         st.error(f"Error: {e}")
     
     st.success("File uploaded successfully!")
 
+    # Select a sheet to work with
+    selected_sheet = st.selectbox("Select a sheet to clean:", list(sheets_dataframes.keys()))
+
     # List of radio buttons for cleaning options with multiselect
-    clean_options = st.multiselect("Select cleaning options:", ["Replace", "Remove Duplicate", "Remove Missing Values", "Convert to Lowercase"])
+    clean_options = st.multiselect("Select cleaning options:", ["Replace", "Remove Duplicate", "Remove Missing Values", "Convert to Lowercase", "Delete Columns", "Sort Column", "Capitalize Columns"])
 
     if "Replace" in clean_options:
-        df = replace(df)
+        sheets_dataframes[selected_sheet] = replace(sheets_dataframes[selected_sheet])
+        st.write("Replaced null values with custom value.")
     if "Remove Duplicate" in clean_options:
-        df = remove_duplicates(df)
-        st.success("Duplicate rows removed successfully.")
+        sheets_dataframes[selected_sheet] = remove_duplicates(sheets_dataframes[selected_sheet])
+        st.write("Removed duplicate rows.")
     if "Remove Missing Values" in clean_options:
-        df = remove_missing_values(df)
-        st.success("Rows with missing values removed successfully.")
+        sheets_dataframes[selected_sheet] = remove_missing_values(sheets_dataframes[selected_sheet])
+        st.write("Removed rows with missing values.")
     if "Convert to Lowercase" in clean_options:
-        selected_columns = st.multiselect("Select columns to convert to lowercase:", df.columns)
-        df = convert_to_lowercase(df, selected_columns)
+        selected_columns = st.multiselect("Select columns to convert to lowercase:", sheets_dataframes[selected_sheet].columns)
+        sheets_dataframes[selected_sheet] = convert_to_lowercase(sheets_dataframes[selected_sheet], selected_columns)
+        st.write(f"Converted selected columns to lowercase: {', '.join(selected_columns)}")
+    if "Delete Columns" in clean_options:
+        columns_to_delete = st.multiselect("Select columns to delete:", sheets_dataframes[selected_sheet].columns)
+        sheets_dataframes[selected_sheet] = delete_columns(sheets_dataframes[selected_sheet], columns_to_delete)
+        st.write(f"Deleted selected columns: {', '.join(columns_to_delete)}")
+    if "Sort Column" in clean_options:
+        column_to_sort = st.selectbox("Select a column to sort:", sheets_dataframes[selected_sheet].columns)
+        sort_order = st.radio("Select sorting order:", ["Ascending", "Descending"])
+        ascending = sort_order == "Ascending"
+        sheets_dataframes[selected_sheet] = sort_column(sheets_dataframes[selected_sheet], column_to_sort, ascending)
+        st.write(f"Sorted column '{column_to_sort}' in {sort_order.lower()} order.")
+    if "Capitalize Columns" in clean_options:
+        selected_columns_to_capitalize = st.multiselect("Select columns to capitalize:", sheets_dataframes[selected_sheet].columns)
+        sheets_dataframes[selected_sheet] = capitalize_column_values(sheets_dataframes[selected_sheet], selected_columns_to_capitalize)
+        st.write(f"Capitalized selected columns: {', '.join(selected_columns_to_capitalize)}")
 
     # Allow users to download the cleaned file in the same format as the input file
     cleaned_file = io.BytesIO()
+    
     if uploaded_file.name.endswith(('xls', 'xlsx')):
         with pd.ExcelWriter(cleaned_file, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name=selected_sheet, index=False)
+            for sheet_name, sheet_df in sheets_dataframes.items():
+                sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
         file_extension = "xlsx"
     else:
-        df.to_csv(cleaned_file, index=False)
+        sheets_dataframes[selected_sheet].to_csv(cleaned_file, index=False)
         file_extension = "csv"
     
     # Get the name of the uploaded file without the extension
     input_file_name = uploaded_file.name.rsplit('.', 1)[0]
 
-    download(cleaned_file, input_file_name, file_extension)
+    download(cleaned_file, f"{input_file_name}_cleaned.{file_extension}")
 
     # If uploaded file is XLS or XLSX, add a button to download as CSV
     if uploaded_file.name.endswith(('xls', 'xlsx')):
+        cleaned_xls_file = io.BytesIO()
+        with pd.ExcelWriter(cleaned_xls_file, engine='openpyxl') as writer:
+            for sheet_name, sheet_df in sheets_dataframes.items():
+                sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
         csv_file = io.BytesIO()
-        df.to_csv(csv_file, index=False)
+        sheets_dataframes[selected_sheet].to_csv(csv_file, index=False)
         st.download_button(
             label="Download Cleaned File (CSV)",
             data=csv_file,
@@ -101,7 +152,24 @@ if uploaded_file is not None:
         )
 
     # Display the cleaned DataFrame
-    st.dataframe(df)
+    st.dataframe(sheets_dataframes[selected_sheet])
+
+    # Display a summary of applied cleaning operations
+    st.sidebar.markdown("### Summary of Cleaning Operations")
+    if "Replace" in clean_options:
+        st.sidebar.write("- Replaced null values with custom value.")
+    if "Remove Duplicate" in clean_options:
+        st.sidebar.write("- Removed duplicate rows.")
+    if "Remove Missing Values" in clean_options:
+        st.sidebar.write("- Removed rows with missing values.")
+    if "Convert to Lowercase" in clean_options:
+        st.sidebar.write(f"- Converted selected columns to lowercase: {', '.join(selected_columns)}")
+    if "Delete Columns" in clean_options:
+        st.sidebar.write(f"- Deleted selected columns: {', '.join(columns_to_delete)}")
+    if "Sort Column" in clean_options:
+        st.sidebar.write(f"- Sorted column '{column_to_sort}' in {sort_order.lower()} order.")
+    if "Capitalize Columns" in clean_options:
+        st.sidebar.write(f"- Capitalized selected columns: {', '.join(selected_columns_to_capitalize)}")
 
 # Add text to the sidebar area (at the edge of the screen)
 st.sidebar.text("Created by Siddhant Dembi")
@@ -116,6 +184,9 @@ You can perform the following operations on your data:
 - **Remove Duplicate Rows:** Eliminate duplicate rows from your dataset.
 - **Remove Missing Values:** Remove rows containing missing values.
 - **Convert to Lowercase:** Convert text columns to lowercase.
+- **Delete Columns:** Select and delete specific columns from the dataset.
+- **Sort Column:** Sort a column in ascending or descending order based on lexicographical order.
+- **Capitalize Columns:** Capitalize the first letter of elements in selected columns.
 
 You can download the cleaned data in the same format as your input file or in CSV format.
 """)
