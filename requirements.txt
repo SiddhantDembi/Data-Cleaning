@@ -1,3 +1,7 @@
 streamlit
 pandas
-openpyxl
+io
+matplotlib
+matplot
+math
+matplotlib_inline

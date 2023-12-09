@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import io
+import matplotlib
+import matplot
+import math
+import matplotlib_inline
 
 # Streamlit UI
 st.title("Data Fixer")
