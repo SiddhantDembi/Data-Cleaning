@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Streamlit UI
-st.title("Data Fixer")
+st.title("Data Cleaner")
 
 # Function to download the cleaned DataFrame
 def download(cleaned_file, file_name_with_extension):
