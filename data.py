@@ -67,6 +67,30 @@ sheets_dataframes = {}
 
 uploaded_file = st.file_uploader("Upload an Excel or CSV file", type=["xls", "xlsx", "csv"])
 
+# Function to load sample CSV file
+def load_sample_csv():
+    sample_file_path = "sample.csv"
+    try:
+        df = pd.read_csv(sample_file_path)
+        return df
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+
+# Button to download sample CSV file
+if st.button("Download Test Sample"):
+    sample_df = load_sample_csv()
+    if sample_df is not None:
+        csv_file = io.BytesIO()
+        sample_df.to_csv(csv_file, index=False)
+        csv_file.seek(0)
+        st.download_button(
+            label="sample.csv",
+            data=csv_file,
+            file_name="sample.csv",
+            mime="text/csv"
+        )
+
 if uploaded_file is not None:
     # Read the uploaded file into a DataFrame
     try:
