@@ -196,7 +196,7 @@ if uploaded_file is not None:
         st.sidebar.write(f"- Capitalized selected columns: {', '.join(selected_columns_to_capitalize)}")
 
 # Add text to the sidebar area (at the edge of the screen)
-st.sidebar.text("Created by Siddhant Dembi")
+# st.sidebar.text("Created by Siddhant Dembi")
 
 # Add a note explaining the features and aim of the project in the sidebar
 st.sidebar.markdown("### Project Description")
